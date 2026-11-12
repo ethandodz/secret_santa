@@ -137,14 +137,18 @@
 
     <div class="card">
       <h2>1. Collect wishlists</h2>
-      <p class="hint">Send this link to everyone in the group chat. Each person fills in gift ideas and things they like, then texts the link it gives them back to you. When you open their link on this device, they're added to the list below with their wishlist.</p>
+      <p class="hint" id="collectHint">Send this link to everyone in the group chat. Each person fills in gift ideas and things they like, then texts the link it gives them back to you. When you open their link on this device, they're added to the list below with their wishlist.</p>
       <button class="ghost" id="shareFormBtn">📋 Copy wishlist form link</button>
-      <label for="importInput">Got someone's wishlist link on another device? <span class="sub">Paste it here:</span></label>
-      <form id="importForm" class="row">
-        <input type="text" id="importInput" placeholder="Paste wishlist link" autocomplete="off">
-        <button class="shrink" type="submit">Add</button>
-      </form>
-      <p class="error" id="importError"></p>
+      <p class="details hidden" id="liveStatus" style="margin:14px 0 0"></p>
+      <div id="linkOnly">
+        <label for="importInput">Got someone's wishlist link on another device? <span class="sub">Paste it here:</span></label>
+        <form id="importForm" class="row">
+          <input type="text" id="importInput" placeholder="Paste wishlist link" autocomplete="off">
+          <button class="shrink" type="submit">Add</button>
+        </form>
+        <p class="error" id="importError"></p>
+      </div>
+      <p class="hint hidden" id="orgDeviceHint" style="margin:14px 0 0">Organizing from another phone or computer too? <button type="button" class="link" id="copyOrgBtn">Copy your organizer link</button> and open it there.</p>
     </div>
 
     <div class="card">
@@ -243,6 +247,7 @@
   <footer>Made with ❤️ for the family</footer>
 </main>
 
+<script src="firebase-config.js"></script>
 <script>
 (function () {
   "use strict";
@@ -314,26 +319,64 @@
     ta.remove();
   }
 
+  // ---------- Shared wishlist database (Firebase, set up in firebase-config.js) ----------
+  // Without it the site still works: wishlists travel as links people text the organizer.
+  const FB_VERSION = "10.14.1";
+  const cfg = window.FIREBASE_CONFIG;
+  const DB_ON = !!(window.SANTA_TEST_DB || (cfg && cfg.projectId));
+  const personKey = name => encodeURIComponent(name.toLowerCase());
+  let dbPromise = null;
+
+  function getDb() {
+    if (dbPromise) return dbPromise;
+    if (window.SANTA_TEST_DB) return (dbPromise = Promise.resolve(window.SANTA_TEST_DB));
+    const u = "https://www.gstatic.com/firebasejs/" + FB_VERSION + "/";
+    dbPromise = Promise.all([import(u + "firebase-app.js"), import(u + "firebase-firestore.js")]).then(([app, fs]) => {
+      const db = fs.getFirestore(app.initializeApp(cfg));
+      const col = g => fs.collection(db, "groups", g, "wishlists");
+      return {
+        save: (g, e) => fs.setDoc(fs.doc(col(g), personKey(e.name)),
+          { name: e.name, ideas: e.ideas, likes: e.likes, updatedAt: Date.now() }),
+        remove: (g, name) => fs.deleteDoc(fs.doc(col(g), personKey(name))),
+        watch: (g, onData, onError) => fs.onSnapshot(col(g), snap => onData(snap.docs.map(d => d.data())), onError)
+      };
+    });
+    return dbPromise;
+  }
+
+  function newGroupId() {
+    const a = new Uint8Array(15);
+    crypto.getRandomValues(a);
+    return Array.from(a, b => "abcdefghijkmnpqrstuvwxyz23456789"[b % 32]).join("");
+  }
+
   // ---------- Routing ----------
   const hash = location.hash.slice(1);
   startSnow();
 
-  if (hash === "wishlist") return showWishForm();
+  if (hash === "wishlist" || hash.startsWith("wishlist=")) return showWishForm(hash.split("=")[1] || "");
+  if (hash.startsWith("organize=")) return showOrganizer(null, hash.slice(9));
   if (hash && !hash.startsWith("add=")) return showReveal(hash);
   showOrganizer(hash.startsWith("add=") ? hash.slice(4) : null);
 
   // =================================================================
   // Wishlist form: what each person fills in for themselves
   // =================================================================
-  function showWishForm() {
+  function showWishForm(group) {
     $("wishForm").classList.remove("hidden");
     document.title = "My Secret Santa wishlist";
     const MINE = "secret-santa-my-wishlist-v1";
-    let link = "";
+    const useDb = DB_ON && !!group;
+    let link = "", saved = null;
     try {
-      const saved = JSON.parse(localStorage.getItem(MINE) || "null");
+      saved = JSON.parse(localStorage.getItem(MINE) || "null");
       if (saved) { $("wName").value = saved.n || ""; $("wIdeas").value = saved.i || ""; $("wLikes").value = saved.l || ""; }
     } catch (e) {}
+    const submitBtn = $("wishFormEl").querySelector("button[type=submit]");
+    if (useDb) {
+      submitBtn.textContent = "Save my wishlist";
+      $("wCopyAgain").classList.add("hidden");
+    }
 
     $("wishFormEl").addEventListener("submit", e => {
       e.preventDefault();
@@ -341,6 +384,29 @@
       if (!entry.n) { $("wError").textContent = "Please add your name."; return; }
       if (!entry.i && !entry.l) { $("wError").textContent = "Add at least one gift idea or something you like."; return; }
       $("wError").textContent = "";
+
+      if (useDb) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Saving…";
+        const oldName = saved && saved.g === group && saved.n;
+        getDb()
+          .then(db => db.save(group, { name: entry.n, ideas: entry.i, likes: entry.l }).then(() => {
+            // If they changed the spelling of their name, drop the old entry.
+            if (oldName && personKey(oldName) !== personKey(entry.n)) return db.remove(group, oldName).catch(() => {});
+          }))
+          .then(() => {
+            saved = Object.assign({ g: group }, entry);
+            try { localStorage.setItem(MINE, JSON.stringify(saved)); } catch (e) {}
+            $("wishFormEl").classList.add("hidden");
+            $("wDone").classList.remove("hidden");
+            $("wDone").querySelector("h2").textContent = "Saved! 🎉";
+            $("wDoneMsg").textContent = "The organizer can see your wishlist now. Want to change something? Come back to this same link any time.";
+          })
+          .catch(() => { $("wError").textContent = "Couldn't save. Check your internet connection and try again."; })
+          .then(() => { submitBtn.disabled = false; submitBtn.textContent = "Save my wishlist"; });
+        return;
+      }
+
       try { localStorage.setItem(MINE, JSON.stringify(entry)); } catch (e) {}
       link = BASE + "#add=" + encode(entry);
       $("wishFormEl").classList.add("hidden");
@@ -400,15 +466,21 @@
   // =================================================================
   // Organizer
   // =================================================================
-  function showOrganizer(importCode) {
+  function showOrganizer(importCode, groupFromLink) {
     $("setup").classList.remove("hidden");
     const STORE = "secret-santa-setup-v1";
-    let state = { people: [], partners: {}, wishes: {}, budget: "", date: "" };
+    let state = { people: [], partners: {}, wishes: {}, synced: {}, group: "", budget: "", date: "" };
     try {
       const saved = JSON.parse(localStorage.getItem(STORE) || "null");
       if (saved && Array.isArray(saved.people)) state = Object.assign(state, saved);
     } catch (e) {}
     if (!state.wishes) state.wishes = {};
+    if (!state.synced) state.synced = {};
+    if (groupFromLink && /^[a-z0-9]{10,40}$/.test(groupFromLink)) {
+      state.group = groupFromLink;
+      history.replaceState(null, "", BASE);
+    }
+    if (DB_ON && !state.group) state.group = newGroupId();
     const open = new Set();   // people whose wishlist editor is expanded
     let lastLinks = [];
 
@@ -481,6 +553,11 @@
         del.setAttribute("aria-label", "Remove " + name);
         del.textContent = "✕";
         del.addEventListener("click", () => {
+          if (DB_ON && state.synced[personKey(name)]) {
+            if (!confirm("Remove " + name + " and delete the wishlist they sent?")) return;
+            getDb().then(db => db.remove(state.group, name)).catch(() => {});
+            delete state.synced[personKey(name)];
+          }
           setPartner(name, null);
           delete state.wishes[name];
           open.delete(name);
@@ -575,8 +652,51 @@
       }
     });
 
+    if (DB_ON) {
+      save();
+      $("collectHint").textContent = "Send this link to everyone in the group chat. Each person fills in gift ideas and things they like, and their wishlist shows up in the list below automatically.";
+      $("linkOnly").classList.add("hidden");
+      $("orgDeviceHint").classList.remove("hidden");
+      const status = $("liveStatus");
+      status.classList.remove("hidden");
+      status.textContent = "Connecting to the wishlist database…";
+      getDb().then(db => db.watch(state.group, docs => {
+        let changed = [];
+        docs.forEach(d => {
+          const name = cleanName(d && d.name);
+          if (!name) return;
+          const key = personKey(name), stamp = Number(d.updatedAt) || 0;
+          if ((state.synced[key] || 0) >= stamp) return;   // already have this version
+          const existing = findPerson(name);
+          const who = existing || name;
+          if (!existing) state.people.push(name);
+          state.wishes[who] = { i: cleanText(d.ideas), l: cleanText(d.likes) };
+          state.synced[key] = stamp;
+          changed.push(who);
+        });
+        const n = docs.length;
+        status.textContent = "🟢 Live: " + n + (n === 1 ? " wishlist" : " wishlists") + " received. New ones show up here automatically.";
+        if (changed.length) {
+          const linksShown = !$("linksCard").classList.contains("hidden");
+          save(); render();
+          if (linksShown) $("drawError").textContent = "New wishlist from " + changed.join(", ") + ". Draw again so the links include it.";
+        }
+      }, () => {
+        status.textContent = "⚠️ Couldn't load wishlists from the database. Double-check the Firebase setup steps in the README.";
+      })).catch(() => {
+        status.textContent = "⚠️ Couldn't connect to the wishlist database. Check your internet connection and reload.";
+      });
+    }
+
+    $("copyOrgBtn").addEventListener("click", function () {
+      copy(BASE + "#organize=" + state.group, () => {
+        this.textContent = "Copied ✓";
+        setTimeout(() => this.textContent = "Copy your organizer link", 2000);
+      });
+    });
+
     $("shareFormBtn").addEventListener("click", function () {
-      copy(BASE + "#wishlist", () => {
+      copy(BASE + "#wishlist" + (DB_ON ? "=" + state.group : ""), () => {
         this.textContent = "Copied ✓ — paste it in your group chat";
         setTimeout(() => this.textContent = "📋 Copy wishlist form link", 2500);
       });
