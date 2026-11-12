@@ -116,6 +116,20 @@
   .details strong { color: var(--ink); }
   .wishes { text-align: left; border-top: 1px solid var(--line); margin-top: 16px; padding-top: 4px; }
   .wishes p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .item {
+    position: relative;
+    border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 44px 10px 12px; margin-bottom: 8px;
+  }
+  .item label { font-size: .8rem; margin: 6px 0 2px; }
+  .item label:first-child { margin-top: 0; }
+  .item input[type=text] { padding: 8px 10px; }
+  .item .remove { position: absolute; top: 4px; right: 2px; }
+  ul.itemsView { list-style: none; margin: 4px 0 0; padding: 0; }
+  ul.itemsView li { padding: 8px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+  ul.itemsView li:last-child { border-bottom: 0; }
+  ul.itemsView a { color: var(--red); font-weight: 600; }
+  ul.itemsView .note { display: block; }
   footer { color: var(--muted); font-size: .8rem; text-align: center; margin-top: 30px; }
   .hidden { display: none !important; }
   #snow { position: fixed; inset: 0; pointer-events: none; z-index: -1; }
@@ -202,8 +216,9 @@
     <form class="card" id="wishFormEl">
       <label for="wName">Your name</label>
       <input type="text" id="wName" maxlength="40" required autocomplete="given-name" placeholder="The name everyone knows you by">
-      <label for="wIdeas">Gift ideas <span class="sub">(specific things you'd love)</span></label>
-      <textarea id="wIdeas" maxlength="600" placeholder="e.g. A cozy throw blanket, a new mystery novel, a nice olive oil"></textarea>
+      <label>Gift ideas <span class="sub">(paste a link and add a note like size or color)</span></label>
+      <p class="hint" style="margin:0 0 8px">Tip: on the store's website or app, tap Share → Copy, then paste it in the Link box.</p>
+      <div id="wItems"></div>
       <label for="wLikes">Things I like <span class="sub">(hobbies, colors, sizes, favorite stores…)</span></label>
       <textarea id="wLikes" maxlength="600" placeholder="e.g. Gardening, anything green, coffee, size M, Target gift cards"></textarea>
       <p class="error" id="wError"></p>
@@ -232,7 +247,7 @@
       <div class="recipient" id="recipient"></div>
       <div class="details" id="extra"></div>
       <div class="wishes hidden" id="rWishes">
-        <div id="rIdeasWrap" class="hidden"><h3>🎁 Gift ideas</h3><p id="rIdeas"></p></div>
+        <div id="rIdeasWrap" class="hidden"><h3>🎁 Gift ideas</h3><ul class="itemsView" id="rItems"></ul><p id="rIdeas"></p></div>
         <div id="rLikesWrap" class="hidden"><h3>💛 Things they like</h3><p id="rLikes"></p></div>
       </div>
       <p class="hint" style="margin-top:16px">🤫 Keep it secret! You can come back to this link any time.</p>
@@ -276,6 +291,126 @@
   const BASE = location.href.split("#")[0];
   const cleanName = s => String(s || "").trim().replace(/\s+/g, " ").slice(0, 40);
   const cleanText = s => String(s || "").trim().slice(0, 600);
+
+  // ---------- Gift idea items: a link and/or a note ("Size medium, navy") ----------
+  const MAX_ITEMS = 20;
+  // Accepts [{u, n}], [{url, note}] (database) or [[u, n]] (compact, in links).
+  function cleanItems(arr) {
+    return (Array.isArray(arr) ? arr : [])
+      .map(x => Array.isArray(x) ? { u: x[0], n: x[1] } : (x || {}))
+      .map(x => ({
+        u: String(x.u || x.url || "").trim().slice(0, 500),
+        n: String(x.n || x.note || "").trim().slice(0, 300)
+      }))
+      .filter(x => x.u || x.n)
+      .slice(0, MAX_ITEMS);
+  }
+  // Returns a URL object for http(s) links only, or null. Finds the link even
+  // if the share sheet pasted extra text around it.
+  function safeUrl(s) {
+    if (!s) return null;
+    const m = s.match(/https?:\/\/\S+/i);
+    let cand = m ? m[0] : s.trim();
+    if (!m && /^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(cand)) cand = "https://" + cand;
+    try {
+      const url = new URL(cand);
+      return /^https?:$/.test(url.protocol) ? url : null;
+    } catch (e) { return null; }
+  }
+
+  // Editable list of gift ideas. Returns { get() } giving the cleaned items.
+  function itemsEditor(host, items, onChange) {
+    host.innerHTML = "";
+    const list = document.createElement("div");
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "link";
+    add.textContent = "+ Add another gift idea";
+    const rows = [];
+    let uid = 0;
+
+    function field(labelText, value, attrs) {
+      const id = "it-" + Math.random().toString(36).slice(2) + "-" + (uid++);
+      const lab = document.createElement("label");
+      lab.htmlFor = id;
+      lab.textContent = labelText;
+      const inp = document.createElement("input");
+      inp.type = "text";
+      inp.id = id;
+      inp.value = value || "";
+      Object.assign(inp, attrs);
+      inp.addEventListener("input", () => onChange && onChange());
+      return [lab, inp];
+    }
+
+    function addRow(item, focus) {
+      if (rows.length >= MAX_ITEMS) return;
+      const box = document.createElement("div");
+      box.className = "item";
+      const [lu, u] = field("Link (optional)", item.u, { maxLength: 500, inputMode: "url", autocapitalize: "off", autocorrect: "off", placeholder: "Paste a link to the item" });
+      const [ln, n] = field("Note", item.n, { maxLength: 300, placeholder: "e.g. Size medium, in navy" });
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "icon remove";
+      del.textContent = "✕";
+      del.title = "Remove this gift idea";
+      del.setAttribute("aria-label", "Remove this gift idea");
+      const row = { box, u, n };
+      del.addEventListener("click", () => {
+        rows.splice(rows.indexOf(row), 1);
+        box.remove();
+        if (!rows.length) addRow({});
+        add.classList.remove("hidden");
+        onChange && onChange();
+      });
+      box.append(lu, u, ln, n, del);
+      list.appendChild(box);
+      rows.push(row);
+      add.classList.toggle("hidden", rows.length >= MAX_ITEMS);
+      if (focus) u.focus();
+    }
+
+    const start = cleanItems(items);
+    (start.length ? start : [{}]).forEach(it => addRow(it));
+    add.addEventListener("click", () => addRow({}, true));
+    host.append(list, add);
+    return { get: () => cleanItems(rows.map(r => ({ u: r.u.value, n: r.n.value }))) };
+  }
+
+  // Read-only list of gift ideas, with safe clickable links.
+  function renderItems(ul, items) {
+    ul.innerHTML = "";
+    cleanItems(items).forEach(it => {
+      const li = document.createElement("li");
+      const url = safeUrl(it.u);
+      if (url) {
+        const a = document.createElement("a");
+        a.href = url.href;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.textContent = "🔗 " + url.hostname.replace(/^www\./, "") + " ↗";
+        li.appendChild(a);
+      } else if (it.u) {
+        const s = document.createElement("span");
+        s.className = "note";
+        s.textContent = it.u;
+        li.appendChild(s);
+      }
+      if (it.n) {
+        const s = document.createElement("span");
+        s.className = "note";
+        s.textContent = it.n;
+        li.appendChild(s);
+      }
+      ul.appendChild(li);
+    });
+  }
+  // Older wishlists had a single free-text "ideas" box; show it as one item.
+  const legacyItems = (items, ideas) => {
+    const c = cleanItems(items);
+    return c.length || !ideas ? c : [{ u: "", n: String(ideas).slice(0, 300) }];
+  };
+  const compactItems = items => cleanItems(items).map(x => [x.u, x.n]);
 
   // ---------- The draw ----------
   // Returns a map giver -> recipient where nobody gets themselves or their partner.
@@ -336,7 +471,7 @@
       const col = g => fs.collection(db, "groups", g, "wishlists");
       return {
         save: (g, e) => fs.setDoc(fs.doc(col(g), personKey(e.name)),
-          { name: e.name, ideas: e.ideas, likes: e.likes, updatedAt: Date.now() }),
+          { name: e.name, ideas: e.ideas || "", likes: e.likes, items: e.items || [], updatedAt: Date.now() }),
         remove: (g, name) => fs.deleteDoc(fs.doc(col(g), personKey(name))),
         watch: (g, onData, onError) => fs.onSnapshot(col(g), snap => onData(snap.docs.map(d => d.data())), onError)
       };
@@ -370,8 +505,9 @@
     let link = "", saved = null;
     try {
       saved = JSON.parse(localStorage.getItem(MINE) || "null");
-      if (saved) { $("wName").value = saved.n || ""; $("wIdeas").value = saved.i || ""; $("wLikes").value = saved.l || ""; }
+      if (saved) { $("wName").value = saved.n || ""; $("wLikes").value = saved.l || ""; }
     } catch (e) {}
+    const editor = itemsEditor($("wItems"), saved ? legacyItems(saved.t, saved.i) : []);
     const submitBtn = $("wishFormEl").querySelector("button[type=submit]");
     if (useDb) {
       submitBtn.textContent = "Save my wishlist";
@@ -380,9 +516,9 @@
 
     $("wishFormEl").addEventListener("submit", e => {
       e.preventDefault();
-      const entry = { n: cleanName($("wName").value), i: cleanText($("wIdeas").value), l: cleanText($("wLikes").value) };
+      const entry = { n: cleanName($("wName").value), l: cleanText($("wLikes").value), t: compactItems(editor.get()) };
       if (!entry.n) { $("wError").textContent = "Please add your name."; return; }
-      if (!entry.i && !entry.l) { $("wError").textContent = "Add at least one gift idea or something you like."; return; }
+      if (!entry.t.length && !entry.l) { $("wError").textContent = "Add at least one gift idea or something you like."; return; }
       $("wError").textContent = "";
 
       if (useDb) {
@@ -390,7 +526,10 @@
         submitBtn.textContent = "Saving…";
         const oldName = saved && saved.g === group && saved.n;
         getDb()
-          .then(db => db.save(group, { name: entry.n, ideas: entry.i, likes: entry.l }).then(() => {
+          .then(db => db.save(group, {
+            name: entry.n, likes: entry.l,
+            items: entry.t.map(([u, n]) => ({ url: u, note: n }))
+          }).then(() => {
             // If they changed the spelling of their name, drop the old entry.
             if (oldName && personKey(oldName) !== personKey(entry.n)) return db.remove(group, oldName).catch(() => {});
           }))
@@ -455,9 +594,12 @@
           line.append(label, s);
           ex.appendChild(line);
         });
-        if (data.i) { $("rIdeas").textContent = data.i; $("rIdeasWrap").classList.remove("hidden"); }
+        const items = cleanItems(data.t);
+        renderItems($("rItems"), items);
+        if (data.i) $("rIdeas").textContent = data.i;
+        if (items.length || data.i) $("rIdeasWrap").classList.remove("hidden");
         if (data.l) { $("rLikes").textContent = data.l; $("rLikesWrap").classList.remove("hidden"); }
-        if (data.i || data.l) $("rWishes").classList.remove("hidden");
+        if (items.length || data.i || data.l) $("rWishes").classList.remove("hidden");
         $("result").classList.add("show");
       }, 1200);
     });
@@ -486,7 +628,12 @@
 
     const save = () => { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) {} };
     const findPerson = name => state.people.find(p => p.toLowerCase() === name.toLowerCase());
-    const hasWish = p => { const w = state.wishes[p]; return !!(w && (w.i || w.l)); };
+    const hasWish = p => { const w = state.wishes[p]; return !!(w && (w.l || cleanItems(w.items).length)); };
+    // Convert any older free-text gift ideas into items.
+    Object.keys(state.wishes).forEach(p => {
+      const w = state.wishes[p] || {};
+      state.wishes[p] = { l: w.l || "", items: legacyItems(w.items, w.i) };
+    });
 
     // Add (or update) someone from a wishlist link. Returns a message, or throws.
     function importWish(code) {
@@ -496,7 +643,7 @@
       const existing = findPerson(name);
       const who = existing || name;
       if (!existing) state.people.push(name);
-      state.wishes[who] = { i: cleanText(d.i), l: cleanText(d.l) };
+      state.wishes[who] = { l: cleanText(d.l), items: legacyItems(d.t, d.i) };
       save();
       return existing ? "Updated " + who + "'s wishlist ✓" : "Added " + who + " and their wishlist ✓";
     }
@@ -576,22 +723,30 @@
 
         const panel = document.createElement("div");
         panel.className = "wishpanel" + (open.has(name) ? "" : " hidden");
-        const w = state.wishes[name] || { i: "", l: "" };
-        [["i", "Gift ideas"], ["l", "Things they like"]].forEach(([key, text]) => {
-          const id = "w-" + key + "-" + state.people.indexOf(name);
-          const lab = document.createElement("label");
-          lab.htmlFor = id;
-          lab.textContent = text;
-          const ta = document.createElement("textarea");
-          ta.id = id;
-          ta.maxLength = 600;
-          ta.value = w[key] || "";
-          ta.addEventListener("input", () => {
-            state.wishes[name] = Object.assign({ i: "", l: "" }, state.wishes[name], { [key]: ta.value });
-            save(); updateWishStatus(); hideLinks();
-          });
-          panel.append(lab, ta);
+        const w = state.wishes[name] || { l: "", items: [] };
+        const edit = () => { state.wishes[name] = state.wishes[name] || { l: "", items: [] }; return state.wishes[name]; };
+
+        const ideasLab = document.createElement("label");
+        ideasLab.textContent = "Gift ideas";
+        const ideasHost = document.createElement("div");
+        const editor = itemsEditor(ideasHost, w.items, () => {
+          edit().items = editor.get();
+          save(); updateWishStatus(); hideLinks();
         });
+
+        const likesId = "w-l-" + state.people.indexOf(name);
+        const likesLab = document.createElement("label");
+        likesLab.htmlFor = likesId;
+        likesLab.textContent = "Things they like";
+        const ta = document.createElement("textarea");
+        ta.id = likesId;
+        ta.maxLength = 600;
+        ta.value = w.l || "";
+        ta.addEventListener("input", () => {
+          edit().l = ta.value;
+          save(); updateWishStatus(); hideLinks();
+        });
+        panel.append(ideasLab, ideasHost, likesLab, ta);
         toggle.addEventListener("click", () => {
           open.has(name) ? open.delete(name) : open.add(name);
           panel.classList.toggle("hidden", !open.has(name));
@@ -670,7 +825,7 @@
           const existing = findPerson(name);
           const who = existing || name;
           if (!existing) state.people.push(name);
-          state.wishes[who] = { i: cleanText(d.ideas), l: cleanText(d.likes) };
+          state.wishes[who] = { l: cleanText(d.likes), items: legacyItems(d.items, d.ideas) };
           state.synced[key] = stamp;
           changed.push(who);
         });
@@ -721,7 +876,8 @@
           url: BASE + "#" + encode({
             g: g, r: r,
             b: state.budget || undefined, d: state.date || undefined,
-            i: cleanText(w.i) || undefined, l: cleanText(w.l) || undefined
+            l: cleanText(w.l) || undefined,
+            t: compactItems(w.items).length ? compactItems(w.items) : undefined
           })
         };
       });

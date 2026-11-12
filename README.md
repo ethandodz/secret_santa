@@ -5,7 +5,7 @@ A one-page website for drawing Secret Santa names. Everyone can add their own wi
 ## How to use it
 
 1. Open the site (see "Putting it online" below).
-2. **Collect wishlists:** click **Copy wishlist form link** and paste it in the family group chat. Each person enters their name, gift ideas and things they like, and taps **Save my wishlist**. They show up in your list automatically, and anyone can reopen the link later to make changes. (If the database isn't set up yet, they text you a link instead. See below.)
+2. **Collect wishlists:** click **Copy wishlist form link** and paste it in the family group chat. Each person enters their name, gift ideas (each one can have a link to the item plus a note like "size medium"), and things they like, then taps **Save my wishlist**. They show up in your list automatically, and anyone can reopen the link later to make changes. (If the database isn't set up yet, they text you a link instead. See below.)
 3. Add anyone who's missing. You can also type in a wishlist for someone yourself.
 4. Use the dropdown next to each name to pick their spouse. Couples are never matched with each other.
 5. Optionally add a spending limit and the gift exchange date.
