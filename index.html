@@ -169,7 +169,7 @@
       <h2>2. Who's playing?</h2>
       <p class="hint">People who sent a wishlist show up here. You can also add names yourself and type in wishlists for them.</p>
       <form id="addForm" class="row">
-        <input type="text" id="nameInput" placeholder="Type a name and press Add" autocomplete="off" maxlength="40">
+        <input type="text" id="nameInput" placeholder="First and last name" autocomplete="off" maxlength="40">
         <button class="shrink" type="submit">Add</button>
       </form>
       <ul class="people" id="peopleList"></ul>
@@ -177,7 +177,7 @@
 
     <div class="card">
       <h2>3. Couples</h2>
-      <p class="hint">Spouses won't be matched with each other. Use the dropdown next to each name above to pick their partner.</p>
+      <p class="hint">Spouses won't be matched with each other. Couples are set automatically when people name their spouse on their wishlist. You can also use the dropdown next to each name above.</p>
       <div id="coupleSummary" class="details">No couples set yet.</div>
     </div>
 
@@ -214,8 +214,11 @@
     <h1>🎁 My Secret Santa wishlist</h1>
     <p class="lead">Help your Secret Santa out! Fill this in, then send it to the organizer. Whoever draws your name will see it.</p>
     <form class="card" id="wishFormEl">
-      <label for="wName">Your name</label>
-      <input type="text" id="wName" maxlength="40" required autocomplete="given-name" placeholder="The name everyone knows you by">
+      <label for="wName">Your first and last name</label>
+      <input type="text" id="wName" maxlength="40" required autocomplete="name" placeholder="e.g. Chloe Smith">
+      <p class="hint" style="margin:4px 0 0">Same first and last name as someone else in the family? Add a middle initial.</p>
+      <label for="wSpouse">Spouse's first and last name <span class="sub">(optional, so you two aren't matched)</span></label>
+      <input type="text" id="wSpouse" maxlength="40" autocomplete="off" placeholder="Leave blank if you're not married">
       <label for="wIdeas">Gift ideas <span class="sub">(anything you'd love, general or specific)</span></label>
       <textarea id="wIdeas" maxlength="600" placeholder="e.g. A cozy throw blanket, a new mystery novel, a nice olive oil"></textarea>
       <label>Specific items <span class="sub">(optional: add a link and a note like size or color)</span></label>
@@ -294,6 +297,8 @@
   const BASE = location.href.split("#")[0];
   const cleanName = s => String(s || "").trim().replace(/\s+/g, " ").slice(0, 40);
   const cleanText = s => String(s || "").trim().slice(0, 600);
+  // First and last name, so two Chloes can be told apart.
+  const isFullName = s => /\S+\s+\S+/.test(String(s || "").trim());
 
   // ---------- Gift idea items: a link and/or a note ("Size medium, navy") ----------
   const MAX_ITEMS = 20;
@@ -467,7 +472,7 @@
       const col = g => fs.collection(db, "groups", g, "wishlists");
       return {
         save: (g, e) => fs.setDoc(fs.doc(col(g), personKey(e.name)),
-          { name: e.name, ideas: e.ideas || "", likes: e.likes, items: e.items || [], updatedAt: Date.now() }),
+          { name: e.name, spouse: e.spouse || "", ideas: e.ideas || "", likes: e.likes, items: e.items || [], updatedAt: Date.now() }),
         remove: (g, name) => fs.deleteDoc(fs.doc(col(g), personKey(name))),
         watch: (g, onData, onError) => fs.onSnapshot(col(g), snap => onData(snap.docs.map(d => d.data())), onError)
       };
@@ -501,7 +506,7 @@
     let link = "", saved = null;
     try {
       saved = JSON.parse(localStorage.getItem(MINE) || "null");
-      if (saved) { $("wName").value = saved.n || ""; $("wIdeas").value = saved.i || ""; $("wLikes").value = saved.l || ""; }
+      if (saved) { $("wName").value = saved.n || ""; $("wSpouse").value = saved.s || ""; $("wIdeas").value = saved.i || ""; $("wLikes").value = saved.l || ""; }
     } catch (e) {}
     const editor = itemsEditor($("wItems"), saved ? saved.t : []);
     const submitBtn = $("wishFormEl").querySelector("button[type=submit]");
@@ -512,8 +517,12 @@
 
     $("wishFormEl").addEventListener("submit", e => {
       e.preventDefault();
-      const entry = { n: cleanName($("wName").value), i: cleanText($("wIdeas").value), l: cleanText($("wLikes").value), t: compactItems(editor.get()) };
+      const entry = { n: cleanName($("wName").value), s: cleanName($("wSpouse").value), i: cleanText($("wIdeas").value), l: cleanText($("wLikes").value), t: compactItems(editor.get()) };
       if (!entry.n) { $("wError").textContent = "Please add your name."; return; }
+      if (!isFullName(entry.n)) { $("wError").textContent = "Please enter your first and last name."; return; }
+      if (entry.s && !isFullName(entry.s)) { $("wError").textContent = "Please enter your spouse's first and last name."; return; }
+      if (entry.s && entry.s.toLowerCase() === entry.n.toLowerCase()) { $("wError").textContent = "Your spouse's name should be different from yours."; return; }
+      if (!entry.s) delete entry.s;
       if (!entry.i && !entry.t.length && !entry.l) { $("wError").textContent = "Add at least one gift idea or something you like."; return; }
       $("wError").textContent = "";
 
@@ -523,7 +532,7 @@
         const oldName = saved && saved.g === group && saved.n;
         getDb()
           .then(db => db.save(group, {
-            name: entry.n, ideas: entry.i, likes: entry.l,
+            name: entry.n, spouse: entry.s || "", ideas: entry.i, likes: entry.l,
             items: entry.t.map(([u, n]) => ({ url: u, note: n }))
           }).then(() => {
             // If they changed the spelling of their name, drop the old entry.
@@ -613,6 +622,8 @@
     } catch (e) {}
     if (!state.wishes) state.wishes = {};
     if (!state.synced) state.synced = {};
+    if (!state.claims) state.claims = {};    // person -> spouse name they gave on their wishlist
+    if (!state.applied) state.applied = {};  // person -> spouse we already paired them with
     if (groupFromLink && /^[a-z0-9]{10,40}$/.test(groupFromLink)) {
       state.group = groupFromLink;
       history.replaceState(null, "", BASE);
@@ -634,6 +645,7 @@
       const who = existing || name;
       if (!existing) state.people.push(name);
       state.wishes[who] = { i: cleanText(d.i), l: cleanText(d.l), items: cleanItems(d.t) };
+      setClaim(who, d.s);
       save();
       return existing ? "Updated " + who + "'s wishlist ✓" : "Added " + who + " and their wishlist ✓";
     }
@@ -655,7 +667,32 @@
       if (a && b) { state.partners[a] = b; state.partners[b] = a; }
     }
 
+    function setClaim(who, spouse) {
+      const sp = cleanName(spouse);
+      if (sp) state.claims[who] = sp; else delete state.claims[who];
+    }
+
+    // Pair people with the spouse they named, once both are on the list.
+    // Each claim is applied once, so the organizer's own dropdown changes stick.
+    // Returns the claims that don't match anyone yet.
+    function applyClaims() {
+      const unmatched = [];
+      let changed = false;
+      Object.keys(state.claims).forEach(who => {
+        if (!state.people.includes(who)) { delete state.claims[who]; delete state.applied[who]; changed = true; return; }
+        const match = findPerson(state.claims[who]);
+        if (!match || match === who) { unmatched.push([who, state.claims[who]]); return; }
+        if (state.applied[who] === match) return;
+        state.applied[who] = match;
+        if (state.partners[who] !== match) setPartner(who, match);
+        changed = true;
+      });
+      if (changed) save();
+      return unmatched;
+    }
+
     function render() {
+      const unmatched = applyClaims();
       const list = $("peopleList");
       list.innerHTML = "";
       state.people.forEach(name => {
@@ -697,6 +734,8 @@
           }
           setPartner(name, null);
           delete state.wishes[name];
+          delete state.claims[name];
+          delete state.applied[name];
           open.delete(name);
           state.people = state.people.filter(p => p !== name);
           save(); render();
@@ -755,7 +794,15 @@
         const q = state.partners[p];
         if (q && !seen.has(p)) { seen.add(p); seen.add(q); pairs.push(p + " & " + q); }
       });
-      $("coupleSummary").textContent = pairs.length ? "💍 " + pairs.join("  ·  ") : "No couples set yet.";
+      const cs = $("coupleSummary");
+      cs.textContent = pairs.length ? "💍 " + pairs.join("  ·  ") : "No couples set yet.";
+      unmatched.filter(([who]) => !state.partners[who]).forEach(([who, sp]) => {
+        const line = document.createElement("div");
+        line.className = "hint";
+        line.style.margin = "8px 0 0";
+        line.textContent = "⏳ " + who + " named their spouse \"" + sp + "\", who isn't on the list yet. They'll be paired once " + sp + " sends a wishlist or you add them. (Spelled differently? Pick the right person in " + who + "'s dropdown.)";
+        cs.appendChild(line);
+      });
       $("drawBtn").disabled = state.people.length < 3;
       $("drawError").textContent = state.people.length < 3 ? "Add at least 3 people to draw names." : "";
       updateWishStatus();
@@ -775,6 +822,7 @@
       const input = $("nameInput");
       const name = cleanName(input.value);
       if (!name) return;
+      if (!isFullName(name)) { $("drawError").textContent = "Please enter a first and last name."; return; }
       if (findPerson(name)) { $("drawError").textContent = name + " is already on the list."; return; }
       state.people.push(name);
       input.value = "";
@@ -819,6 +867,7 @@
           const who = existing || name;
           if (!existing) state.people.push(name);
           state.wishes[who] = { i: cleanText(d.ideas), l: cleanText(d.likes), items: cleanItems(d.items) };
+          setClaim(who, d.spouse);
           state.synced[key] = stamp;
           changed.push(who);
         });
