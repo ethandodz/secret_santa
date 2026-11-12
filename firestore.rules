@@ -11,10 +11,12 @@ service cloud.firestore {
       allow read, delete: if groupId.size() >= 10;
 
       allow create, update: if groupId.size() >= 10
-        && request.resource.data.keys().hasOnly(['name', 'ideas', 'likes', 'items', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['name', 'spouse', 'ideas', 'likes', 'items', 'updatedAt'])
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
         && request.resource.data.name.size() <= 40
+        && request.resource.data.get('spouse', '') is string
+        && request.resource.data.get('spouse', '').size() <= 40
         && request.resource.data.ideas is string
         && request.resource.data.ideas.size() <= 600
         && request.resource.data.likes is string
