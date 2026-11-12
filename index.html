@@ -169,7 +169,7 @@
       <h2>2. Who's playing?</h2>
       <p class="hint">People who sent a wishlist show up here. You can also add names yourself and type in wishlists for them.</p>
       <form id="addForm" class="row">
-        <input type="text" id="nameInput" placeholder="Type a name and press Add" autocomplete="off" maxlength="40">
+        <input type="text" id="nameInput" placeholder="First and last name" autocomplete="off" maxlength="40">
         <button class="shrink" type="submit">Add</button>
       </form>
       <ul class="people" id="peopleList"></ul>
@@ -214,9 +214,10 @@
     <h1>🎁 My Secret Santa wishlist</h1>
     <p class="lead">Help your Secret Santa out! Fill this in, then send it to the organizer. Whoever draws your name will see it.</p>
     <form class="card" id="wishFormEl">
-      <label for="wName">Your name</label>
-      <input type="text" id="wName" maxlength="40" required autocomplete="given-name" placeholder="The name everyone knows you by">
-      <label for="wSpouse">Spouse's name <span class="sub">(optional, so you two aren't matched)</span></label>
+      <label for="wName">Your first and last name</label>
+      <input type="text" id="wName" maxlength="40" required autocomplete="name" placeholder="e.g. Chloe Smith">
+      <p class="hint" style="margin:4px 0 0">Same first and last name as someone else in the family? Add a middle initial.</p>
+      <label for="wSpouse">Spouse's first and last name <span class="sub">(optional, so you two aren't matched)</span></label>
       <input type="text" id="wSpouse" maxlength="40" autocomplete="off" placeholder="Leave blank if you're not married">
       <label for="wIdeas">Gift ideas <span class="sub">(anything you'd love, general or specific)</span></label>
       <textarea id="wIdeas" maxlength="600" placeholder="e.g. A cozy throw blanket, a new mystery novel, a nice olive oil"></textarea>
@@ -296,6 +297,8 @@
   const BASE = location.href.split("#")[0];
   const cleanName = s => String(s || "").trim().replace(/\s+/g, " ").slice(0, 40);
   const cleanText = s => String(s || "").trim().slice(0, 600);
+  // First and last name, so two Chloes can be told apart.
+  const isFullName = s => /\S+\s+\S+/.test(String(s || "").trim());
 
   // ---------- Gift idea items: a link and/or a note ("Size medium, navy") ----------
   const MAX_ITEMS = 20;
@@ -516,6 +519,8 @@
       e.preventDefault();
       const entry = { n: cleanName($("wName").value), s: cleanName($("wSpouse").value), i: cleanText($("wIdeas").value), l: cleanText($("wLikes").value), t: compactItems(editor.get()) };
       if (!entry.n) { $("wError").textContent = "Please add your name."; return; }
+      if (!isFullName(entry.n)) { $("wError").textContent = "Please enter your first and last name."; return; }
+      if (entry.s && !isFullName(entry.s)) { $("wError").textContent = "Please enter your spouse's first and last name."; return; }
       if (entry.s && entry.s.toLowerCase() === entry.n.toLowerCase()) { $("wError").textContent = "Your spouse's name should be different from yours."; return; }
       if (!entry.s) delete entry.s;
       if (!entry.i && !entry.t.length && !entry.l) { $("wError").textContent = "Add at least one gift idea or something you like."; return; }
@@ -817,6 +822,7 @@
       const input = $("nameInput");
       const name = cleanName(input.value);
       if (!name) return;
+      if (!isFullName(name)) { $("drawError").textContent = "Please enter a first and last name."; return; }
       if (findPerson(name)) { $("drawError").textContent = name + " is already on the list."; return; }
       state.people.push(name);
       input.value = "";
