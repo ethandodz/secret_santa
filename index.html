@@ -1,0 +1,789 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Family Secret Santa</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎁</text></svg>">
+<style>
+  :root {
+    --bg: #fbf7f2;
+    --card: #ffffff;
+    --ink: #2a2522;
+    --muted: #6f6660;
+    --line: #e7ded4;
+    --red: #b3261e;
+    --red-ink: #ffffff;
+    --green: #1f6b45;
+    --soft: #f3ece4;
+    --shadow: 0 1px 2px rgba(0,0,0,.05), 0 8px 24px rgba(0,0,0,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #171413;
+      --card: #221e1c;
+      --ink: #f1ebe6;
+      --muted: #a89e97;
+      --line: #3a3330;
+      --red: #e0564c;
+      --red-ink: #1a0f0e;
+      --green: #5fbf8b;
+      --soft: #2b2624;
+      --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 640px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 6px; }
+  h2 { font-size: 1.1rem; margin: 0 0 12px; }
+  h3 { font-size: .95rem; margin: 18px 0 4px; }
+  p.lead { color: var(--muted); margin: 0 0 24px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 18px;
+    box-shadow: var(--shadow);
+  }
+  .hint { color: var(--muted); font-size: .9rem; margin: -6px 0 14px; }
+  label { display: block; font-weight: 600; font-size: .9rem; margin: 12px 0 4px; }
+  label:first-child { margin-top: 0; }
+  label .sub { font-weight: 400; color: var(--muted); }
+  input[type=text], select, textarea {
+    width: 100%;
+    font: inherit;
+    color: var(--ink);
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  textarea { resize: vertical; min-height: 84px; }
+  input[type=text]:focus, select:focus, textarea:focus { outline: 2px solid var(--red); outline-offset: 1px; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row > * { flex: 1; min-width: 0; }
+  .row > .shrink { flex: 0 0 auto; }
+  button {
+    font: inherit;
+    font-weight: 600;
+    border: 0;
+    border-radius: 10px;
+    padding: 10px 16px;
+    cursor: pointer;
+    background: var(--red);
+    color: var(--red-ink);
+  }
+  button.ghost { background: var(--soft); color: var(--ink); }
+  button.icon { background: transparent; color: var(--muted); padding: 6px 10px; font-size: 1.1rem; }
+  button.link { background: none; color: var(--red); padding: 2px 0; font-size: .88rem; }
+  button.link.done { color: var(--green); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.big { width: 100%; padding: 14px; font-size: 1.05rem; }
+  ul.people { list-style: none; margin: 14px 0 0; padding: 0; }
+  ul.people li { padding: 8px 0; border-top: 1px solid var(--line); }
+  ul.people .top { display: flex; gap: 8px; align-items: center; }
+  ul.people .name { flex: 1; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+  ul.people select { flex: 0 1 180px; padding: 6px 8px; font-size: .9rem; }
+  ul.people .wishpanel { padding: 4px 0 8px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .grid2 label { margin-top: 0; }
+  @media (max-width: 480px) { .grid2 { grid-template-columns: 1fr; } }
+  .error { color: var(--red); font-weight: 600; margin: 10px 0 0; }
+  .notice {
+    background: var(--soft); border-left: 4px solid var(--green);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 18px; font-weight: 600;
+  }
+  .links .top { flex-wrap: wrap; }
+  .links .status { font-size: .85rem; color: var(--green); }
+  .reveal { text-align: center; padding-top: 24px; }
+  .reveal .gift { font-size: 88px; line-height: 1; margin: 12px 0 20px; display: inline-block; }
+  .reveal .gift.shake { animation: shake .6s ease-in-out 2; }
+  @keyframes shake {
+    0%,100% { transform: rotate(0); } 25% { transform: rotate(-12deg); } 75% { transform: rotate(12deg); }
+  }
+  .result { display: none; }
+  .result.show { display: block; animation: pop .45s ease-out; }
+  @keyframes pop { from { transform: scale(.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .recipient { font-size: 2.6rem; font-weight: 800; color: var(--red); margin: 4px 0 12px; overflow-wrap: anywhere; }
+  .details { color: var(--muted); }
+  .details strong { color: var(--ink); }
+  .wishes { text-align: left; border-top: 1px solid var(--line); margin-top: 16px; padding-top: 4px; }
+  .wishes p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  footer { color: var(--muted); font-size: .8rem; text-align: center; margin-top: 30px; }
+  .hidden { display: none !important; }
+  #snow { position: fixed; inset: 0; pointer-events: none; z-index: -1; }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal .gift.shake, .result.show { animation: none; }
+  }
+</style>
+</head>
+<body>
+<canvas id="snow"></canvas>
+<main>
+
+  <!-- ================= ORGANIZER VIEW ================= -->
+  <section id="setup" class="hidden">
+    <h1>🎄 Family Secret Santa</h1>
+    <p class="lead">Collect wishlists, add everyone, mark who's married to whom, and draw names. Each person gets their own private link that only shows <em>their</em> match — so even the organizer stays surprised.</p>
+
+    <div class="notice hidden" id="importNotice"></div>
+
+    <div class="card">
+      <h2>1. Collect wishlists</h2>
+      <p class="hint" id="collectHint">Send this link to everyone in the group chat. Each person fills in gift ideas and things they like, then texts the link it gives them back to you. When you open their link on this device, they're added to the list below with their wishlist.</p>
+      <button class="ghost" id="shareFormBtn">📋 Copy wishlist form link</button>
+      <p class="details hidden" id="liveStatus" style="margin:14px 0 0"></p>
+      <div id="linkOnly">
+        <label for="importInput">Got someone's wishlist link on another device? <span class="sub">Paste it here:</span></label>
+        <form id="importForm" class="row">
+          <input type="text" id="importInput" placeholder="Paste wishlist link" autocomplete="off">
+          <button class="shrink" type="submit">Add</button>
+        </form>
+        <p class="error" id="importError"></p>
+      </div>
+      <p class="hint hidden" id="orgDeviceHint" style="margin:14px 0 0">Organizing from another phone or computer too? <button type="button" class="link" id="copyOrgBtn">Copy your organizer link</button> and open it there.</p>
+    </div>
+
+    <div class="card">
+      <h2>2. Who's playing?</h2>
+      <p class="hint">People who sent a wishlist show up here. You can also add names yourself and type in wishlists for them.</p>
+      <form id="addForm" class="row">
+        <input type="text" id="nameInput" placeholder="Type a name and press Add" autocomplete="off" maxlength="40">
+        <button class="shrink" type="submit">Add</button>
+      </form>
+      <ul class="people" id="peopleList"></ul>
+    </div>
+
+    <div class="card">
+      <h2>3. Couples</h2>
+      <p class="hint">Spouses won't be matched with each other. Use the dropdown next to each name above to pick their partner.</p>
+      <div id="coupleSummary" class="details">No couples set yet.</div>
+    </div>
+
+    <div class="card">
+      <h2>4. Details (optional)</h2>
+      <div class="grid2">
+        <div>
+          <label for="budget">Spending limit</label>
+          <input type="text" id="budget" placeholder="e.g. $50" maxlength="30">
+        </div>
+        <div>
+          <label for="date">Gift exchange date</label>
+          <input type="text" id="date" placeholder="e.g. Dec 24" maxlength="40">
+        </div>
+      </div>
+    </div>
+
+    <p class="hint" id="wishStatus" style="margin:0 0 10px"></p>
+    <button class="big" id="drawBtn">🎁 Draw names</button>
+    <p class="error" id="drawError"></p>
+
+    <div class="card hidden" id="linksCard" style="margin-top:18px">
+      <h2>5. Send everyone their link</h2>
+      <p class="hint">Copy each person's link and text it to just them. Their match's wishlist is included. Don't click the links yourself (except your own!) or you'll spoil the surprise. If a wishlist changes after this, draw again and send the new links.</p>
+      <ul class="people links" id="linksList"></ul>
+      <div class="row" style="margin-top:14px">
+        <button class="ghost" id="copyAllBtn">Copy all as a message list</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= WISHLIST FORM (for everyone) ================= -->
+  <section id="wishForm" class="hidden">
+    <h1>🎁 My Secret Santa wishlist</h1>
+    <p class="lead">Help your Secret Santa out! Fill this in, then send it to the organizer. Whoever draws your name will see it.</p>
+    <form class="card" id="wishFormEl">
+      <label for="wName">Your name</label>
+      <input type="text" id="wName" maxlength="40" required autocomplete="given-name" placeholder="The name everyone knows you by">
+      <label for="wIdeas">Gift ideas <span class="sub">(specific things you'd love)</span></label>
+      <textarea id="wIdeas" maxlength="600" placeholder="e.g. A cozy throw blanket, a new mystery novel, a nice olive oil"></textarea>
+      <label for="wLikes">Things I like <span class="sub">(hobbies, colors, sizes, favorite stores…)</span></label>
+      <textarea id="wLikes" maxlength="600" placeholder="e.g. Gardening, anything green, coffee, size M, Target gift cards"></textarea>
+      <p class="error" id="wError"></p>
+      <button class="big" type="submit" style="margin-top:14px">Send to organizer</button>
+    </form>
+    <div class="card hidden" id="wDone">
+      <h2>Almost done! 📨</h2>
+      <p id="wDoneMsg" style="margin-top:0">Your wishlist link is copied. Paste it into a text to the organizer.</p>
+      <div class="row">
+        <button class="ghost" id="wCopyAgain">Copy link again</button>
+        <button class="ghost" id="wEdit">Edit my wishlist</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= PARTICIPANT REVEAL ================= -->
+  <section id="reveal" class="reveal hidden">
+    <h1 id="hello">Hi!</h1>
+    <p class="lead">Your Secret Santa match is wrapped up below.</p>
+    <div class="gift" id="gift">🎁</div>
+    <div>
+      <button class="big" id="revealBtn" style="max-width:320px">Tap to unwrap</button>
+    </div>
+    <div class="result card" id="result" style="margin-top:20px">
+      <div class="details">You're buying a gift for…</div>
+      <div class="recipient" id="recipient"></div>
+      <div class="details" id="extra"></div>
+      <div class="wishes hidden" id="rWishes">
+        <div id="rIdeasWrap" class="hidden"><h3>🎁 Gift ideas</h3><p id="rIdeas"></p></div>
+        <div id="rLikesWrap" class="hidden"><h3>💛 Things they like</h3><p id="rLikes"></p></div>
+      </div>
+      <p class="hint" style="margin-top:16px">🤫 Keep it secret! You can come back to this link any time.</p>
+    </div>
+  </section>
+
+  <section id="bad" class="reveal hidden">
+    <h1>Hmm, that link looks broken 🎅</h1>
+    <p class="lead">Ask whoever sent it to send it again — make sure the whole thing got copied.</p>
+  </section>
+
+  <footer>Made with ❤️ for the family</footer>
+</main>
+
+<script src="firebase-config.js"></script>
+<script>
+(function () {
+  "use strict";
+  const $ = id => document.getElementById(id);
+
+  // ---------- Encoding: keeps names and wishlists out of plain sight in links ----------
+  // This isn't bank-grade encryption — it just stops anyone from reading a match
+  // by glancing at a link. Everything stays after the "#", so it never leaves the browser.
+  const KEY = "ho-ho-ho-merry-christmas-2026";
+
+  function encode(obj) {
+    const bytes = new TextEncoder().encode(JSON.stringify(obj));
+    let bin = "";
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i] ^ KEY.charCodeAt(i % KEY.length));
+    return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+
+  function decode(str) {
+    const b64 = str.replace(/-/g, "+").replace(/_/g, "/");
+    const bin = atob(b64 + "===".slice((b64.length + 3) % 4));
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i) ^ KEY.charCodeAt(i % KEY.length);
+    return JSON.parse(new TextDecoder().decode(bytes));
+  }
+
+  const BASE = location.href.split("#")[0];
+  const cleanName = s => String(s || "").trim().replace(/\s+/g, " ").slice(0, 40);
+  const cleanText = s => String(s || "").trim().slice(0, 600);
+
+  // ---------- The draw ----------
+  // Returns a map giver -> recipient where nobody gets themselves or their partner.
+  // Tries to avoid two people drawing each other, but allows it if there's no other way.
+  function draw(people, partnerOf) {
+    function attempt(avoidMutual) {
+      for (let t = 0; t < 20000; t++) {
+        const r = people.slice();
+        for (let i = r.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [r[i], r[j]] = [r[j], r[i]];
+        }
+        let ok = true;
+        const m = {};
+        for (let i = 0; i < people.length && ok; i++) {
+          const g = people[i], rec = r[i];
+          if (g === rec || partnerOf[g] === rec) ok = false;
+          m[g] = rec;
+        }
+        if (ok && avoidMutual) ok = people.every(g => m[m[g]] !== g);
+        if (ok) return m;
+      }
+      return null;
+    }
+    return attempt(true) || attempt(false);
+  }
+
+  // ---------- Clipboard / share ----------
+  function copy(text, done) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text, done));
+    } else fallbackCopy(text, done);
+  }
+  function fallbackCopy(text, done) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); done(); } catch (e) { prompt("Copy this:", text); }
+    ta.remove();
+  }
+
+  // ---------- Shared wishlist database (Firebase, set up in firebase-config.js) ----------
+  // Without it the site still works: wishlists travel as links people text the organizer.
+  const FB_VERSION = "10.14.1";
+  const cfg = window.FIREBASE_CONFIG;
+  const DB_ON = !!(window.SANTA_TEST_DB || (cfg && cfg.projectId));
+  const personKey = name => encodeURIComponent(name.toLowerCase());
+  let dbPromise = null;
+
+  function getDb() {
+    if (dbPromise) return dbPromise;
+    if (window.SANTA_TEST_DB) return (dbPromise = Promise.resolve(window.SANTA_TEST_DB));
+    const u = "https://www.gstatic.com/firebasejs/" + FB_VERSION + "/";
+    dbPromise = Promise.all([import(u + "firebase-app.js"), import(u + "firebase-firestore.js")]).then(([app, fs]) => {
+      const db = fs.getFirestore(app.initializeApp(cfg));
+      const col = g => fs.collection(db, "groups", g, "wishlists");
+      return {
+        save: (g, e) => fs.setDoc(fs.doc(col(g), personKey(e.name)),
+          { name: e.name, ideas: e.ideas, likes: e.likes, updatedAt: Date.now() }),
+        remove: (g, name) => fs.deleteDoc(fs.doc(col(g), personKey(name))),
+        watch: (g, onData, onError) => fs.onSnapshot(col(g), snap => onData(snap.docs.map(d => d.data())), onError)
+      };
+    });
+    return dbPromise;
+  }
+
+  function newGroupId() {
+    const a = new Uint8Array(15);
+    crypto.getRandomValues(a);
+    return Array.from(a, b => "abcdefghijkmnpqrstuvwxyz23456789"[b % 32]).join("");
+  }
+
+  // ---------- Routing ----------
+  const hash = location.hash.slice(1);
+  startSnow();
+
+  if (hash === "wishlist" || hash.startsWith("wishlist=")) return showWishForm(hash.split("=")[1] || "");
+  if (hash.startsWith("organize=")) return showOrganizer(null, hash.slice(9));
+  if (hash && !hash.startsWith("add=")) return showReveal(hash);
+  showOrganizer(hash.startsWith("add=") ? hash.slice(4) : null);
+
+  // =================================================================
+  // Wishlist form: what each person fills in for themselves
+  // =================================================================
+  function showWishForm(group) {
+    $("wishForm").classList.remove("hidden");
+    document.title = "My Secret Santa wishlist";
+    const MINE = "secret-santa-my-wishlist-v1";
+    const useDb = DB_ON && !!group;
+    let link = "", saved = null;
+    try {
+      saved = JSON.parse(localStorage.getItem(MINE) || "null");
+      if (saved) { $("wName").value = saved.n || ""; $("wIdeas").value = saved.i || ""; $("wLikes").value = saved.l || ""; }
+    } catch (e) {}
+    const submitBtn = $("wishFormEl").querySelector("button[type=submit]");
+    if (useDb) {
+      submitBtn.textContent = "Save my wishlist";
+      $("wCopyAgain").classList.add("hidden");
+    }
+
+    $("wishFormEl").addEventListener("submit", e => {
+      e.preventDefault();
+      const entry = { n: cleanName($("wName").value), i: cleanText($("wIdeas").value), l: cleanText($("wLikes").value) };
+      if (!entry.n) { $("wError").textContent = "Please add your name."; return; }
+      if (!entry.i && !entry.l) { $("wError").textContent = "Add at least one gift idea or something you like."; return; }
+      $("wError").textContent = "";
+
+      if (useDb) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Saving…";
+        const oldName = saved && saved.g === group && saved.n;
+        getDb()
+          .then(db => db.save(group, { name: entry.n, ideas: entry.i, likes: entry.l }).then(() => {
+            // If they changed the spelling of their name, drop the old entry.
+            if (oldName && personKey(oldName) !== personKey(entry.n)) return db.remove(group, oldName).catch(() => {});
+          }))
+          .then(() => {
+            saved = Object.assign({ g: group }, entry);
+            try { localStorage.setItem(MINE, JSON.stringify(saved)); } catch (e) {}
+            $("wishFormEl").classList.add("hidden");
+            $("wDone").classList.remove("hidden");
+            $("wDone").querySelector("h2").textContent = "Saved! 🎉";
+            $("wDoneMsg").textContent = "The organizer can see your wishlist now. Want to change something? Come back to this same link any time.";
+          })
+          .catch(() => { $("wError").textContent = "Couldn't save. Check your internet connection and try again."; })
+          .then(() => { submitBtn.disabled = false; submitBtn.textContent = "Save my wishlist"; });
+        return;
+      }
+
+      try { localStorage.setItem(MINE, JSON.stringify(entry)); } catch (e) {}
+      link = BASE + "#add=" + encode(entry);
+      $("wishFormEl").classList.add("hidden");
+      $("wDone").classList.remove("hidden");
+
+      const copied = () => { $("wDoneMsg").textContent = "Your wishlist link is copied. Paste it into a text to the organizer — that's it!"; };
+      if (navigator.share && matchMedia("(pointer: coarse)").matches) {
+        $("wDoneMsg").textContent = "Pick Messages (or however you text the organizer) and send it to them.";
+        navigator.share({ title: "My Secret Santa wishlist", text: entry.n + "'s Secret Santa wishlist 🎁", url: link })
+          .then(() => { $("wDoneMsg").textContent = "Sent! 🎉 If you change your mind about anything, edit and send it again."; },
+                () => copy(link, copied));
+      } else copy(link, copied);
+    });
+    $("wCopyAgain").addEventListener("click", () => copy(link, () => { $("wDoneMsg").textContent = "Copied again ✓ Paste it into a text to the organizer."; }));
+    $("wEdit").addEventListener("click", () => {
+      $("wDone").classList.add("hidden");
+      $("wishFormEl").classList.remove("hidden");
+    });
+  }
+
+  // =================================================================
+  // Reveal: what each person sees when they open their match link
+  // =================================================================
+  function showReveal(code) {
+    let data;
+    try { data = decode(code); } catch (e) { data = null; }
+    if (!data || !data.g || !data.r) { $("bad").classList.remove("hidden"); return; }
+    $("reveal").classList.remove("hidden");
+    $("hello").textContent = "Hi " + data.g + "! 👋";
+    document.title = "Secret Santa for " + data.g;
+    $("revealBtn").addEventListener("click", function () {
+      const gift = $("gift");
+      this.disabled = true;
+      gift.classList.add("shake");
+      setTimeout(() => {
+        gift.textContent = "🎉";
+        gift.classList.remove("shake");
+        this.classList.add("hidden");
+        $("recipient").textContent = data.r;
+        const ex = $("extra");
+        [["Spending limit: ", data.b], ["Gift exchange: ", data.d]].forEach(([label, val]) => {
+          if (!val) return;
+          const line = document.createElement("div");
+          const s = document.createElement("strong");
+          s.textContent = val;
+          line.append(label, s);
+          ex.appendChild(line);
+        });
+        if (data.i) { $("rIdeas").textContent = data.i; $("rIdeasWrap").classList.remove("hidden"); }
+        if (data.l) { $("rLikes").textContent = data.l; $("rLikesWrap").classList.remove("hidden"); }
+        if (data.i || data.l) $("rWishes").classList.remove("hidden");
+        $("result").classList.add("show");
+      }, 1200);
+    });
+  }
+
+  // =================================================================
+  // Organizer
+  // =================================================================
+  function showOrganizer(importCode, groupFromLink) {
+    $("setup").classList.remove("hidden");
+    const STORE = "secret-santa-setup-v1";
+    let state = { people: [], partners: {}, wishes: {}, synced: {}, group: "", budget: "", date: "" };
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORE) || "null");
+      if (saved && Array.isArray(saved.people)) state = Object.assign(state, saved);
+    } catch (e) {}
+    if (!state.wishes) state.wishes = {};
+    if (!state.synced) state.synced = {};
+    if (groupFromLink && /^[a-z0-9]{10,40}$/.test(groupFromLink)) {
+      state.group = groupFromLink;
+      history.replaceState(null, "", BASE);
+    }
+    if (DB_ON && !state.group) state.group = newGroupId();
+    const open = new Set();   // people whose wishlist editor is expanded
+    let lastLinks = [];
+
+    const save = () => { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) {} };
+    const findPerson = name => state.people.find(p => p.toLowerCase() === name.toLowerCase());
+    const hasWish = p => { const w = state.wishes[p]; return !!(w && (w.i || w.l)); };
+
+    // Add (or update) someone from a wishlist link. Returns a message, or throws.
+    function importWish(code) {
+      const d = decode(code);
+      const name = cleanName(d && d.n);
+      if (!name) throw new Error("no name");
+      const existing = findPerson(name);
+      const who = existing || name;
+      if (!existing) state.people.push(name);
+      state.wishes[who] = { i: cleanText(d.i), l: cleanText(d.l) };
+      save();
+      return existing ? "Updated " + who + "'s wishlist ✓" : "Added " + who + " and their wishlist ✓";
+    }
+
+    if (importCode) {
+      history.replaceState(null, "", BASE);
+      const n = $("importNotice");
+      try { n.textContent = "🎉 " + importWish(importCode); }
+      catch (e) { n.textContent = "That wishlist link looks broken — ask them to send it again."; n.style.borderLeftColor = "var(--red)"; }
+      n.classList.remove("hidden");
+    }
+
+    function setPartner(a, b) {
+      [a, b].forEach(p => {
+        const old = state.partners[p];
+        if (old) delete state.partners[old];
+        delete state.partners[p];
+      });
+      if (a && b) { state.partners[a] = b; state.partners[b] = a; }
+    }
+
+    function render() {
+      const list = $("peopleList");
+      list.innerHTML = "";
+      state.people.forEach(name => {
+        const li = document.createElement("li");
+        const top = document.createElement("div");
+        top.className = "top";
+
+        const span = document.createElement("span");
+        span.className = "name";
+        span.textContent = name;
+
+        const sel = document.createElement("select");
+        sel.setAttribute("aria-label", "Partner of " + name);
+        const none = document.createElement("option");
+        none.value = "";
+        none.textContent = "No partner";
+        sel.appendChild(none);
+        state.people.forEach(other => {
+          if (other === name) return;
+          const o = document.createElement("option");
+          o.value = other;
+          o.textContent = "💍 " + other;
+          o.selected = state.partners[name] === other;
+          sel.appendChild(o);
+        });
+        sel.addEventListener("change", () => { setPartner(name, sel.value || null); save(); render(); });
+
+        const del = document.createElement("button");
+        del.className = "icon";
+        del.type = "button";
+        del.title = "Remove " + name;
+        del.setAttribute("aria-label", "Remove " + name);
+        del.textContent = "✕";
+        del.addEventListener("click", () => {
+          if (DB_ON && state.synced[personKey(name)]) {
+            if (!confirm("Remove " + name + " and delete the wishlist they sent?")) return;
+            getDb().then(db => db.remove(state.group, name)).catch(() => {});
+            delete state.synced[personKey(name)];
+          }
+          setPartner(name, null);
+          delete state.wishes[name];
+          open.delete(name);
+          state.people = state.people.filter(p => p !== name);
+          save(); render();
+        });
+        top.append(span, sel, del);
+
+        const toggle = document.createElement("button");
+        toggle.type = "button";
+        const label = () => {
+          toggle.className = "link" + (hasWish(name) ? " done" : "");
+          toggle.textContent = open.has(name) ? "Hide wishlist ▴" : hasWish(name) ? "✓ Has a wishlist — view/edit" : "+ Add wishlist";
+        };
+        label();
+
+        const panel = document.createElement("div");
+        panel.className = "wishpanel" + (open.has(name) ? "" : " hidden");
+        const w = state.wishes[name] || { i: "", l: "" };
+        [["i", "Gift ideas"], ["l", "Things they like"]].forEach(([key, text]) => {
+          const id = "w-" + key + "-" + state.people.indexOf(name);
+          const lab = document.createElement("label");
+          lab.htmlFor = id;
+          lab.textContent = text;
+          const ta = document.createElement("textarea");
+          ta.id = id;
+          ta.maxLength = 600;
+          ta.value = w[key] || "";
+          ta.addEventListener("input", () => {
+            state.wishes[name] = Object.assign({ i: "", l: "" }, state.wishes[name], { [key]: ta.value });
+            save(); updateWishStatus(); hideLinks();
+          });
+          panel.append(lab, ta);
+        });
+        toggle.addEventListener("click", () => {
+          open.has(name) ? open.delete(name) : open.add(name);
+          panel.classList.toggle("hidden", !open.has(name));
+          label();
+        });
+
+        li.append(top, toggle, panel);
+        list.appendChild(li);
+      });
+
+      const seen = new Set(), pairs = [];
+      state.people.forEach(p => {
+        const q = state.partners[p];
+        if (q && !seen.has(p)) { seen.add(p); seen.add(q); pairs.push(p + " & " + q); }
+      });
+      $("coupleSummary").textContent = pairs.length ? "💍 " + pairs.join("  ·  ") : "No couples set yet.";
+      $("drawBtn").disabled = state.people.length < 3;
+      $("drawError").textContent = state.people.length < 3 ? "Add at least 3 people to draw names." : "";
+      updateWishStatus();
+      hideLinks();
+    }
+
+    function updateWishStatus() {
+      const missing = state.people.filter(p => !hasWish(p));
+      $("wishStatus").textContent = !state.people.length ? "" :
+        missing.length ? "Still waiting on wishlists from: " + missing.join(", ") + ". (You can still draw without them.)"
+                       : "✓ Everyone has a wishlist!";
+    }
+    function hideLinks() { $("linksCard").classList.add("hidden"); }
+
+    $("addForm").addEventListener("submit", e => {
+      e.preventDefault();
+      const input = $("nameInput");
+      const name = cleanName(input.value);
+      if (!name) return;
+      if (findPerson(name)) { $("drawError").textContent = name + " is already on the list."; return; }
+      state.people.push(name);
+      input.value = "";
+      save(); render();
+      input.focus();
+    });
+
+    $("importForm").addEventListener("submit", e => {
+      e.preventDefault();
+      const v = $("importInput").value.trim();
+      const code = v.includes("#add=") ? v.split("#add=")[1] : v;
+      try {
+        const msg = importWish(code);
+        $("importError").textContent = "";
+        $("importInput").value = "";
+        const n = $("importNotice");
+        n.textContent = "🎉 " + msg;
+        n.style.borderLeftColor = "";
+        n.classList.remove("hidden");
+        render();
+      } catch (err) {
+        $("importError").textContent = "That doesn't look like a wishlist link. Make sure the whole link got copied.";
+      }
+    });
+
+    if (DB_ON) {
+      save();
+      $("collectHint").textContent = "Send this link to everyone in the group chat. Each person fills in gift ideas and things they like, and their wishlist shows up in the list below automatically.";
+      $("linkOnly").classList.add("hidden");
+      $("orgDeviceHint").classList.remove("hidden");
+      const status = $("liveStatus");
+      status.classList.remove("hidden");
+      status.textContent = "Connecting to the wishlist database…";
+      getDb().then(db => db.watch(state.group, docs => {
+        let changed = [];
+        docs.forEach(d => {
+          const name = cleanName(d && d.name);
+          if (!name) return;
+          const key = personKey(name), stamp = Number(d.updatedAt) || 0;
+          if ((state.synced[key] || 0) >= stamp) return;   // already have this version
+          const existing = findPerson(name);
+          const who = existing || name;
+          if (!existing) state.people.push(name);
+          state.wishes[who] = { i: cleanText(d.ideas), l: cleanText(d.likes) };
+          state.synced[key] = stamp;
+          changed.push(who);
+        });
+        const n = docs.length;
+        status.textContent = "🟢 Live: " + n + (n === 1 ? " wishlist" : " wishlists") + " received. New ones show up here automatically.";
+        if (changed.length) {
+          const linksShown = !$("linksCard").classList.contains("hidden");
+          save(); render();
+          if (linksShown) $("drawError").textContent = "New wishlist from " + changed.join(", ") + ". Draw again so the links include it.";
+        }
+      }, () => {
+        status.textContent = "⚠️ Couldn't load wishlists from the database. Double-check the Firebase setup steps in the README.";
+      })).catch(() => {
+        status.textContent = "⚠️ Couldn't connect to the wishlist database. Check your internet connection and reload.";
+      });
+    }
+
+    $("copyOrgBtn").addEventListener("click", function () {
+      copy(BASE + "#organize=" + state.group, () => {
+        this.textContent = "Copied ✓";
+        setTimeout(() => this.textContent = "Copy your organizer link", 2000);
+      });
+    });
+
+    $("shareFormBtn").addEventListener("click", function () {
+      copy(BASE + "#wishlist" + (DB_ON ? "=" + state.group : ""), () => {
+        this.textContent = "Copied ✓ — paste it in your group chat";
+        setTimeout(() => this.textContent = "📋 Copy wishlist form link", 2500);
+      });
+    });
+
+    $("budget").value = state.budget;
+    $("date").value = state.date;
+    $("budget").addEventListener("input", e => { state.budget = e.target.value.trim(); save(); hideLinks(); });
+    $("date").addEventListener("input", e => { state.date = e.target.value.trim(); save(); hideLinks(); });
+
+    $("drawBtn").addEventListener("click", () => {
+      const result = draw(state.people, state.partners);
+      if (!result) {
+        $("drawError").textContent = "Couldn't find a valid draw with those couples — try adding more people.";
+        return;
+      }
+      $("drawError").textContent = "";
+      lastLinks = state.people.map(g => {
+        const r = result[g], w = state.wishes[r] || {};
+        return {
+          name: g,
+          url: BASE + "#" + encode({
+            g: g, r: r,
+            b: state.budget || undefined, d: state.date || undefined,
+            i: cleanText(w.i) || undefined, l: cleanText(w.l) || undefined
+          })
+        };
+      });
+
+      const list = $("linksList");
+      list.innerHTML = "";
+      lastLinks.forEach(({ name, url }) => {
+        const li = document.createElement("li");
+        const top = document.createElement("div");
+        top.className = "top";
+        const who = document.createElement("span");
+        who.className = "name";
+        who.textContent = name;
+        const status = document.createElement("span");
+        status.className = "status";
+        const btn = document.createElement("button");
+        btn.className = "ghost";
+        btn.type = "button";
+        btn.textContent = "Copy link";
+        btn.addEventListener("click", () => copy(url, () => { status.textContent = "Copied ✓"; }));
+        top.append(who, status, btn);
+        li.appendChild(top);
+        list.appendChild(li);
+      });
+      $("linksCard").classList.remove("hidden");
+      $("linksCard").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+
+    $("copyAllBtn").addEventListener("click", function () {
+      const text = lastLinks.map(l => l.name + ": " + l.url).join("\n\n");
+      copy(text, () => { this.textContent = "Copied ✓"; setTimeout(() => this.textContent = "Copy all as a message list", 1500); });
+    });
+
+    render();
+  }
+
+  // ---------- A little snow ----------
+  function startSnow() {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const c = $("snow"), ctx = c.getContext("2d");
+    let flakes = [];
+    function size() {
+      c.width = innerWidth; c.height = innerHeight;
+      flakes = Array.from({ length: Math.min(80, Math.floor(innerWidth / 12)) }, () => ({
+        x: Math.random() * c.width, y: Math.random() * c.height,
+        r: 1 + Math.random() * 2.5, s: .3 + Math.random() * .8, w: Math.random() * Math.PI * 2
+      }));
+    }
+    size(); addEventListener("resize", size);
+    const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+    (function tick() {
+      ctx.clearRect(0, 0, c.width, c.height);
+      ctx.fillStyle = dark ? "rgba(255,255,255,.55)" : "rgba(160,180,200,.45)";
+      flakes.forEach(f => {
+        f.y += f.s; f.w += .01; f.x += Math.sin(f.w) * .3;
+        if (f.y > c.height) { f.y = -5; f.x = Math.random() * c.width; }
+        ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.fill();
+      });
+      requestAnimationFrame(tick);
+    })();
+  }
+})();
+</script>
+</body>
+</html>
