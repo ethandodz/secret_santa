@@ -19,4 +19,11 @@
 // These settings are safe to publish. They only say which database to use;
 // the rules in firestore.rules decide what anyone can do with it.
 
-window.FIREBASE_CONFIG = null;
+window.FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCBz0KxMc55N8Uz3OUbNZX2c0dtuyFd5Ho",
+  authDomain: "family-secret-santa-60cef.firebaseapp.com",
+  projectId: "family-secret-santa-60cef",
+  storageBucket: "family-secret-santa-60cef.firebasestorage.app",
+  messagingSenderId: "713803482293",
+  appId: "1:713803482293:web:91b00aa6410c8e40162afc"
+};
