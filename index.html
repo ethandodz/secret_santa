@@ -295,7 +295,7 @@
     return JSON.parse(new TextDecoder().decode(bytes));
   }
 
-  const BASE = location.href.split("#")[0];
+  const BASE = location.href.split(/[?#]/)[0];
   const cleanName = s => String(s || "").trim().replace(/\s+/g, " ").slice(0, 40);
   const cleanText = s => String(s || "").trim().slice(0, 600);
   // First and last name, so two Chloes can be told apart.
@@ -495,6 +495,10 @@
   addEventListener("hashchange", () => location.reload());
   startSnow();
 
+  // Match links put the code in "?m=" (some phones drop the part after "#").
+  // Older match links used "#" and still work below.
+  const matchCode = new URLSearchParams(location.search).get("m");
+  if (matchCode) return showReveal(matchCode);
   if (hash === "wishlist" || hash.startsWith("wishlist=")) return showWishForm(hash.split("=")[1] || "");
   if (hash.startsWith("organize=")) return showOrganizer(null, hash.slice(9));
   if (hash && !hash.startsWith("add=")) return showReveal(hash);
@@ -927,7 +931,7 @@
         const r = result[g], w = state.wishes[r] || {};
         return {
           name: g,
-          url: BASE + "#" + encode({
+          url: BASE + "?m=" + encode({
             g: g, r: r,
             b: state.budget || undefined, d: state.date || undefined,
             i: cleanText(w.i) || undefined, l: cleanText(w.l) || undefined,
