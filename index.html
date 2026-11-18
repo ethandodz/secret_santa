@@ -148,6 +148,7 @@
     <p class="lead">Collect wishlists, add everyone, mark who's married to whom, and draw names. Each person gets their own private link that only shows <em>their</em> match — so even the organizer stays surprised.</p>
 
     <div class="notice hidden" id="importNotice"></div>
+    <div class="notice hidden" id="lostNotice" style="border-left-color: var(--red)">👋 Looking for your Secret Santa match or the wishlist form? This page is for the organizer. Go back to the message, tap the link again, and if you still see this page, tap ↻ to reload.</div>
 
     <div class="card">
       <h2>1. Collect wishlists</h2>
@@ -488,6 +489,10 @@
 
   // ---------- Routing ----------
   const hash = location.hash.slice(1);
+  // If someone opens a link to this page in a tab that already has the site
+  // open, the browser may only swap the part after "#" without reloading.
+  // Reload so the new link (their match, the wishlist form...) actually shows.
+  addEventListener("hashchange", () => location.reload());
   startSnow();
 
   if (hash === "wishlist" || hash.startsWith("wishlist=")) return showWishForm(hash.split("=")[1] || "");
@@ -617,7 +622,11 @@
     const STORE = "secret-santa-setup-v1";
     let state = { people: [], partners: {}, wishes: {}, synced: {}, group: "", budget: "", date: "" };
     try {
-      const saved = JSON.parse(localStorage.getItem(STORE) || "null");
+      const raw = localStorage.getItem(STORE);
+      // Someone who has never organized on this device probably landed here by
+      // mistake; point them back to their own link.
+      if (!raw && !importCode && !groupFromLink) $("lostNotice").classList.remove("hidden");
+      const saved = JSON.parse(raw || "null");
       if (saved && Array.isArray(saved.people)) state = Object.assign(state, saved);
     } catch (e) {}
     if (!state.wishes) state.wishes = {};
@@ -632,7 +641,10 @@
     const open = new Set();   // people whose wishlist editor is expanded
     let lastLinks = [];
 
-    const save = () => { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) {} };
+    const save = () => {
+      if (state.people.length) $("lostNotice").classList.add("hidden");
+      try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) {}
+    };
     const findPerson = name => state.people.find(p => p.toLowerCase() === name.toLowerCase());
     const hasWish = p => { const w = state.wishes[p]; return !!(w && (w.i || w.l || cleanItems(w.items).length)); };
 
